@@ -1,91 +1,96 @@
 ---
 layout: post
 title: "Cache Fundamentals: From Cache Lines to Way Locking"
-date: 2026-08-12 12:00:00 +0530
+date: 2026-08-12 09:00:00 +0530
 categories: [Computer Architecture, Memory Systems]
 tags: [cache, way-locking, local-memory, computer-architecture]
-description: "A beginner-friendly explanation of cache lines, sets, ways, eviction, and how way locking can reserve cache capacity as software-managed local memory."
+description: "Building a cache from first principles to understand why cache lines, sets, ways, eviction, and way locking exist."
 math: true
+mermaid: true
 ---
 
-Modern processors can execute instructions much faster than they can fetch data from main memory. A cache reduces this gap by keeping useful data close to the processor.
+The first time I read about *way locking*, the term sounded as if it belonged near the beginning of a cache explanation. It does not. Way locking solves a problem created by several earlier design decisions, and it only makes sense after those decisions make sense.
 
-That simple idea quickly introduces unfamiliar terms: *cache line*, *set*, *way*, *associativity*, *eviction*, and *way locking*. This article builds those ideas from the ground up and then explains how a cache can dedicate some of its ways to software-managed local memory.
+So instead of beginning with a definition, let us build a cache together.
 
-## Why Do We Need a Cache?
+We will start with a processor that has no cache, encounter one problem at a time, and add only the hardware needed to solve the problem in front of us. By the end, cache lines, sets, ways, eviction, and way locking should feel less like vocabulary to memorize and more like consequences of the design.
 
-Consider a processor executing an addition:
+## The Processor Is Fast, but Its Data Is Far Away
+
+Imagine that the processor wants to execute:
 
 ```c
 result = a + b;
 ```
 
-The addition itself may be fast, but the processor first needs the values of `a` and `b`. If they must be fetched from slower main memory, the processor may spend many cycles waiting.
+The addition may take only a small number of cycles. But before the processor can add anything, it needs the values of `a` and `b`. If those values are in main memory, the processor may spend far longer waiting for them than performing the addition.
 
-The memory system therefore usually has multiple levels:
+This is the basic memory problem: the largest memories are usually not the fastest ones. Registers are extremely fast but can hold very little. Main memory can hold much more, but it is farther from the processor and slower to access.
 
-```text
-Processor
-   │
-   ▼
-Registers       smallest and fastest
-   │
-   ▼
-L1 cache
-   │
-   ▼
-L2/L3 cache
-   │
-   ▼
-Main memory     larger and slower
+```mermaid
+flowchart TD
+    A["Registers<br/>tiny and fastest"] --> B["L1 cache"]
+    B --> C["L2 / L3 cache"]
+    C --> D["Main memory<br/>large and slower"]
 ```
 
-A cache is a small, fast memory that keeps copies of data from a larger, slower memory. When the processor requests an address, the cache checks whether it already has the requested data.
+Suppose we place a small, fast memory between the processor and main memory. Whenever the processor requests data, this memory checks whether it already has a nearby copy. If it does, the access is fast. If it does not, the data is fetched from the slower level and retained in case it is needed again.
 
-- **Cache hit:** the data is present in the cache.
-- **Cache miss:** the data is absent and must be fetched from a lower memory level.
+That small memory is the **cache**.
 
-The goal is to make most accesses hits.
+An access found in the cache is a **hit**. An access that must go to the next memory level is a **miss**. At this point, our goal appears simple: keep useful data close enough that most requests become hits.
 
-## Cache Lines and Memory Blocks
+But we have not yet decided what exactly the cache should store.
 
-A cache does not normally fetch a single byte at a time. It transfers a fixed-size group of adjacent bytes called a **memory block** and stores it in a **cache line**.
+## Fetching a Line Instead of a Single Value
 
-For most discussions, *cache block size* and *cache line size* mean the same size. The words emphasize two sides of the transfer:
+If the processor asks for one four-byte integer, the most obvious design would fetch exactly those four bytes. That seems efficient—until we look at how programs normally access memory.
 
-- A **memory block** is the fixed-size region in memory.
-- A **cache line** is the entry holding that block inside the cache.
+Consider a loop over an array:
 
-Suppose the line size is 64 bytes. If the processor requests a four-byte value at address 100, the cache may fetch the aligned block covering addresses 64 through 127.
+```c
+for (int i = 0; i < 16; i++) {
+    sum += values[i];
+}
+```
+
+After reading `values[0]`, the program immediately reads `values[1]`, then `values[2]`, and so on. Fetching each integer through a separate main-memory transaction would ignore a useful pattern: data close to a recently accessed address is likely to be accessed soon. This behavior is called **spatial locality**.
+
+The cache therefore fetches a fixed-size aligned region rather than only the requested bytes. A common size is 64 bytes. If the processor requests a four-byte value at address 100, the cache may fetch the complete aligned region from address 64 through 127.
 
 ```text
 Memory addresses
 
 64                                               127
 ┌──────────────────────────────────────────────────┐
-│                 64-byte block                    │
+│                 64-byte region                   │
 │                         ▲                        │
 └─────────────────────────┼────────────────────────┘
                     requested value
 ```
 
-Fetching nearby bytes is useful because programs often access nearby data. For example, after reading `array[0]`, a program will often read `array[1]`.
+The region in main memory is usually called a **memory block**. The place holding its copy inside the cache is called a **cache line**. People often use *cache block* and *cache line* interchangeably because they have the same size, but the words describe the two sides of the transfer: a memory block is copied into a cache line.
 
-## Why Is a Cache Divided into Sets?
+Now one miss can bring in several values that the processor is likely to use next. We spend more bandwidth on the first access, hoping to avoid many later accesses to slow memory.
 
-The cache must answer an important question very quickly:
+We have decided the unit of transfer. Our next problem is finding a line after it has entered the cache.
 
-> If this address is cached, where should I look for it?
+## A Cache Must Be Fast to Search
 
-Searching every cache line would be expensive. Instead, each memory block is mapped to one **set**. A set is a small group of cache-line slots.
+Suppose the cache contains a thousand lines. When an address arrives, we could compare it against every line to find a match. That would make the cache flexible, because any memory block could live anywhere. It would also require a large number of comparisons on every access—the opposite of the fast lookup we wanted.
+
+At the other extreme, we could give every memory block exactly one possible location. Lookup would be easy, but unrelated blocks assigned to the same location would continually replace each other.
+
+A set-associative cache chooses a point between these extremes. Each memory block is mapped to one small region of the cache called a **set**. The cache searches only that set, not the entire cache.
 
 A simplified mapping is:
 
 $$
-\text{set index} = \text{memory block number} \bmod \text{number of sets}
+\text{set index} =
+\text{memory block number} \bmod \text{number of sets}.
 $$
 
-If there are four sets, blocks may map like this:
+With four sets, the mapping repeats:
 
 | Memory block | Cache set |
 |---:|---:|
@@ -96,13 +101,13 @@ If there are four sets, blocks may map like this:
 | 4 | 0 |
 | 5 | 1 |
 
-Blocks 0 and 4 both map to Set 0. This means multiple memory blocks may compete for space in the same set.
+Block 0 and block 4 both map to Set 0. The mapping makes lookup fast because the address tells the hardware where to search. It also creates a new problem: several blocks can want the same set even when other parts of the cache are free.
 
-## What Is a Cache Way?
+If Set 0 could hold only one line, accessing blocks 0 and 4 alternately would cause them to evict each other repeatedly. We need more than one possible home inside each set.
 
-If a set held only one line, every new block mapping to that set would replace the old one. To reduce this conflict, a set can contain multiple line slots. Each slot is called a **way**.
+## Ways Give a Set More Than One Choice
 
-A four-way set-associative cache has four possible slots in every set:
+Let us give every set four line slots instead of one. Each slot is called a **way**.
 
 | Set | Way 0 | Way 1 | Way 2 | Way 3 |
 |---:|---|---|---|---|
@@ -111,53 +116,60 @@ A four-way set-associative cache has four possible slots in every set:
 | 2 | one line | one line | one line | one line |
 | ... | ... | ... | ... | ... |
 
-A memory block still maps to exactly one set, but it may occupy any way within that set.
+A memory block still maps to only one set, so lookup remains limited. Within that set, however, the block may occupy any of four ways. This is a **four-way set-associative cache**.
 
-Therefore:
+A way is easiest to understand as one column of this table. It is not normally one continuous region of application memory. Way 0 means one line slot in Set 0, another line slot in Set 1, another in Set 2, and so on across every set.
 
-$$
-\boxed{\text{total cache lines} = \text{number of sets} \times \text{number of ways}}
-$$
-
-And the data capacity is:
+This layout also gives us the cache-capacity formula. If every set contains one line per way, then
 
 $$
-\boxed{\text{cache capacity} = \text{sets} \times \text{ways} \times \text{line size}}
+\boxed{\text{total lines} = \text{number of sets} \times \text{number of ways}}.
 $$
 
-For example, consider a cache with:
-
-- 256 sets
-- 4 ways per set
-- 64 bytes per line
-
-It contains:
+Each line holds `line size` bytes, so
 
 $$
-256 \times 4 = 1024\ \text{cache lines}
+\boxed{\text{cache capacity} =
+\text{sets} \times \text{ways} \times \text{line size}}.
 $$
 
-Its data capacity is:
+Take a cache with 256 sets, four ways, and 64-byte lines. It contains
 
 $$
-256 \times 4 \times 64 = 65{,}536\ \text{bytes} = 64\ \text{KiB}
+256 \times 4 = 1024\ \text{lines},
 $$
 
-This calculation usually excludes small amounts of metadata such as tags, valid bits, dirty bits, and replacement state.
+and its data capacity is
 
-## What Happens When a Set Is Full?
+$$
+256 \times 4 \times 64
+= 65{,}536\ \text{bytes}
+= 64\ \text{KiB}.
+$$
 
-Suppose four blocks mapping to Set 0 occupy all four ways. A fifth block also maps to Set 0.
+The formula counts the data stored in the lines. Real cache hardware also keeps metadata such as tags, valid bits, dirty bits, and replacement state, so the physical implementation needs slightly more storage than the advertised data capacity.
 
-The cache must select an existing line to remove before inserting the new one. This removal is called **eviction**. A replacement policy—such as least-recently-used, pseudo-LRU, or random selection—chooses the victim.
+We have now made lookup fast and reduced conflicts by giving each set several choices. We have not eliminated conflicts entirely.
 
-This automatic behavior is normally useful, but it creates a problem for important data. A frequently reused table, kernel, or model weight may be evicted by unrelated memory traffic and then fetched again later.
+## Eviction Is the Cost of Having Finite Space
 
-## What Is Way Locking?
+Suppose five different memory blocks map to Set 0 in our four-way cache. The first four blocks can occupy its four ways. When the fifth arrives, the set is full.
 
-**Way locking reserves one or more cache ways so normal cache replacement cannot use them.**
+The cache cannot place that block in Set 1 because the address mapping says it belongs in Set 0. It must choose one of Set 0's existing lines and remove it. That removal is called **eviction**.
 
-In a four-way cache, reserving one way can be visualized as:
+The replacement policy chooses the victim. A cache might approximate least-recently-used behavior, use a simpler pseudo-LRU scheme, or make another hardware-specific choice. The precise policy is less important here than the consequence: normal cached data has no guarantee that it will remain resident.
+
+Most of the time, automatic replacement is exactly what we want. Software accesses memory and the cache quietly tries to retain the useful parts. But consider a small table or a tensor tile that a kernel will reuse repeatedly. Unrelated traffic may map to the same sets, evict those lines, and force the important data to be fetched again.
+
+Now we have reached the problem that way locking is designed to solve.
+
+## Reserving Predictable Space Changes the Cache
+
+Imagine telling the cache controller:
+
+> Continue using three ways normally, but do not allow the replacement policy to use the fourth way. I want to manage that space deliberately.
+
+In a four-way cache, the result could look like this:
 
 | Set | Way 0 | Way 1 | Way 2 | Way 3 |
 |---:|---|---|---|---|
@@ -166,193 +178,120 @@ In a four-way cache, reserving one way can be visualized as:
 | 2 | Local memory | Cache | Cache | Cache |
 | ... | ... | ... | ... | ... |
 
-Notice that a way extends across **every set**. Locking one complete way reserves one line-sized slot in each set. It does not normally mean locking a single entry in one chosen set.
+Way 0 contributes one protected line in every set. Normal cache traffic continues through Ways 1–3, but it cannot evict the contents placed in the reserved way.
 
-The capacity represented by one way is:
+This is **way locking** or, in some designs, **way partitioning**. The physical storage has not changed. What changes is the policy controlling part of it. Some ways remain a hardware-managed cache; the locked ways become protected space that software or firmware can manage more explicitly.
 
-$$
-\boxed{\text{capacity per way} = \text{number of sets} \times \text{line size}}
-$$
-
-For the earlier 64 KiB, four-way example:
+Because one way contains one line in every set, its capacity is
 
 $$
-256 \times 64 = 16\ \text{KiB per way}
+\boxed{\text{capacity per way} =
+\text{number of sets} \times \text{line size}}.
 $$
 
-Reserving one way therefore creates 16 KiB of protected space and leaves 48 KiB for ordinary caching.
+For our 256-set cache with 64-byte lines, one way contributes
 
-## Way Locking as Local Memory
+$$
+256 \times 64 = 16\ \text{KiB}.
+$$
 
-Some designs use way locking to turn part of a cache into **software-managed local memory**.
+Locking one way of the 64 KiB cache therefore creates 16 KiB of protected space and leaves 48 KiB for normal caching.
 
-The difference is who decides what remains there:
+This reveals the trade-off immediately. We gain predictability for selected data, but the rest of the program now has a smaller cache. The locked data must be valuable enough to justify the additional misses that may occur in the remaining ways.
 
-- In an ordinary cache, hardware automatically fills and replaces lines.
-- In local memory, software explicitly decides what data to place and reuse.
+## When Locked Ways Become Local Memory
 
-This creates a hybrid structure:
+Some hardware describes those reserved ways as **Local Memory**. This can be confusing because the physical structure is still the cache array. The important difference is not the underlying storage; it is who controls the contents.
+
+In the normal-cache portion, hardware decides what to bring in and what to evict. In the local-memory portion, software explicitly places data and expects it to remain until the partition is changed or the data is deliberately replaced.
 
 ```text
-One physical cache structure
-┌──────────────────────┬──────────────────────────────┐
-│ Software-managed LM  │ Hardware-managed cache       │
-│ reserved ways        │ remaining ways               │
-└──────────────────────┴──────────────────────────────┘
+One physical storage structure
+┌────────────────────────┬────────────────────────────┐
+│ Software-managed space │ Hardware-managed cache     │
+│ locked ways            │ remaining ways             │
+└────────────────────────┴────────────────────────────┘
 ```
 
-It can be useful for repeatedly accessed data such as:
+This can be useful for data with known reuse: a lookup table, a frequently executed code region, a tensor tile, or another working set whose eviction would be costly. It can also improve predictability, which matters in systems where a surprise cache miss is more than a small performance fluctuation.
 
-- a hot lookup table;
-- a small kernel or instruction sequence;
-- frequently reused tensor tiles;
-- model weights for the current operation;
-- a hot expert in a mixture-of-experts model;
-- data whose access time must be predictable.
+The cache has therefore become a hybrid. We are trading some automatic behavior for explicit control.
 
-## Interpreting an `nWaysLM` Register
+## How Hardware Exposes the Partition
 
-Consider a 32-bit control register described like this:
+Once a cache supports way partitioning, software needs some way to configure it. Architectures commonly expose that control through a privileged register, but the encoding is not universal.
 
-```text
-Way locking to create dedicated cache space for Local Memory
+One design can store a **count**: reserve zero ways, one way, two ways, and so on. The hardware then follows a fixed convention—perhaps choosing the lowest-numbered or highest-numbered ways. A cache with $N$ ways needs approximately $\log_2(N)$ bits to represent those counts.
 
-Register value:
-{ Unused(31:lg(nWays)), nWaysLM(lg2(nWays)-1:0) }
+Another design can store a **way mask**, with one bit corresponding to each way. In a four-way cache, a mask such as `0101` could reserve two particular ways while leaving the other two under normal replacement. A mask provides more choice, but it requires one control bit per way.
 
-Supported values:
-nWaysLM = 0 to nWays-1
-```
+Both controls describe complete ways. Neither one selects an individual set. A way-count field says how many columns of the cache are reserved; a way mask says which columns are reserved. Selecting only one `(set, way)` entry would require a different mechanism, such as per-line locking.
 
-The important field is `nWaysLM`: the **number of ways assigned to local memory**. The upper register bits are unused.
+For the 64 KiB, four-way cache we have been using, a count-based partition could produce:
 
-Assume the cache has four ways:
-
-$$
-nWays = 4
-$$
-
-The field needs two bits because:
-
-$$
-\log_2(4) = 2
-$$
-
-The register can then be understood as:
-
-```text
-Bit 31                                  Bit 2  Bit 1 Bit 0
-┌────────────────────────────────────────────┬───────────┐
-│                  Unused                    │  nWaysLM  │
-└────────────────────────────────────────────┴───────────┘
-```
-
-The supported values are:
-
-| `nWaysLM` | Binary value | Local-memory ways | Normal cache ways |
-|---:|---:|---:|---:|
-| 0 | `00` | 0 | 4 |
-| 1 | `01` | 1 | 3 |
-| 2 | `10` | 2 | 2 |
-| 3 | `11` | 3 | 1 |
-
-If the cache is 64 KiB, each way contributes 16 KiB:
-
-| `nWaysLM` | Local-memory capacity | Normal cache capacity |
+| Reserved ways | Local memory | Normal cache |
 |---:|---:|---:|
 | 0 | 0 KiB | 64 KiB |
 | 1 | 16 KiB | 48 KiB |
 | 2 | 32 KiB | 32 KiB |
 | 3 | 48 KiB | 16 KiB |
 
-The register contains a **count**, not a set identifier. There is no field selecting a particular set. The natural interpretation is therefore that the chosen number of ways is reserved across all sets.
+The arithmetic comes from the cache organization, not from any particular register name. Once we know that one way contributes 16 KiB, the control simply decides how many such slices belong to each side of the partition.
 
-The excerpt alone does not specify which numbered ways are selected. Hardware might reserve the lowest-numbered ways, the highest-numbered ways, or use an internal convention described elsewhere.
+## Leaving One Way for the Normal Cache
 
-## Can One Entry in a Specific Set Be Locked?
+Some count-based interfaces stop at $N-1$ reserved ways for an $N$-way cache. In a four-way cache, software may assign zero, one, two, or three ways to Local Memory, but not all four.
 
-It is technically possible, but it requires different hardware support.
+We can understand why from the problem the cache still has to solve. Ordinary memory requests continue to arrive. Each request maps to a set, and the cache needs at least one replaceable entry in that set. If every way were removed from normal replacement, a new cacheable block would have nowhere to go unless the hardware supported bypassing the cache or switching the entire structure into a different operating mode.
 
-One cache entry is identified by a set and a way:
+Such a design chooses the simpler guarantee that at least one way in every set remains a normal cache way.
 
-$$
-\text{cache entry} = (\text{set},\ \text{way})
-$$
+Another architecture could allow all ways to be locked, but it would have to define what happens to ordinary cacheable accesses. They might bypass the cache, use another cache level, or become invalid while the structure operates entirely as local memory. This behavior is architecture-specific rather than an inherent rule of way locking.
 
-To lock only Set 10, Way 2, the cache could store a lock bit with each entry:
+## Whole-Way Locking Is Not the Only Possible Design
 
-```text
-Set 10, Way 2
-  valid  = 1
-  dirty  = 0
-  locked = 1
-  tag    = ...
+Once we understand a cache entry as a particular `(set, way)` pair, it is natural to imagine more precise control. Hardware could attach a lock bit to every line and allow software to protect only Set 10, Way 2. It could also accept an address range and lock the lines holding that range.
+
+Those mechanisms are technically possible, but they need additional metadata and control logic. Software may also need knowledge of physical addresses, cache indexing, coherence, and replacement behavior. Whole-way locking is coarser, but it is simple: reserve the same slot across every set and reduce the associativity of the remaining cache in a predictable way.
+
+This is why a way-count or way-mask control cannot select one specific set. It is not an arbitrary limitation of software. The control represents a different hardware mechanism.
+
+## Releasing the Space Requires More Than Changing a Number
+
+If software can change the partition, it can usually return reserved ways to the normal cache. But changing the partition raises one final question: what should happen to the data already stored in those ways?
+
+Three operations are easy to mix up:
+
+- **Unlocking** makes a way eligible for normal cache replacement again.
+- **Invalidating** marks its current contents as no longer present.
+- **Writing back** copies modified, or *dirty*, contents to the next memory level.
+
+Unlocking alone does not necessarily erase anything. The old lines may remain until normal cache traffic replaces them. If software modified data in the local-memory ways, the controller may require it to be written back before the partition changes. If stale lines must not be reused, invalidation may also be necessary.
+
+The correct sequence depends on the architecture. A design may require some form of write-back or invalidation before its partition control is reprogrammed. The hardware specification must define the exact procedure and the privilege level required to perform it.
+
+## The Design We Ended Up With
+
+We began with a processor waiting on slow memory and added a small fast store. We fetched aligned lines rather than individual values because programs often access nearby data. We divided the cache into sets so that lookup would remain fast. We added several ways to each set so that blocks mapping to the same set would have more than one possible home.
+
+Finite ways led to eviction. Eviction made automatic caching unpredictable for data that software knew it would reuse. Way locking then appeared as a controlled trade: reserve complete ways for predictable storage and leave the rest under the normal replacement policy.
+
+The full relationship is:
+
+```mermaid
+flowchart TD
+    A["Slow main-memory access"] --> B["Add a small fast cache"]
+    B --> C["Fetch lines to exploit locality"]
+    C --> D["Use sets for fast lookup"]
+    D --> E["Add ways to reduce conflicts"]
+    E --> F["Finite ways cause eviction"]
+    F --> G["Lock ways for protected reuse"]
 ```
 
-That mechanism is generally called **cache-line locking** rather than complete-way locking. Other designs may allow software to lock an address range and let the hardware determine the affected sets and ways.
+Way locking is therefore not an isolated cache feature. It is a response to the cache's central compromise: hardware-managed replacement is convenient and usually effective, but it cannot guarantee that a particular working set will stay resident.
 
-An `nWaysLM` count alone cannot express a specific set, line, or address range.
+The final mental model I keep is this:
 
-## Can All Ways Be Locked?
+> A way is one line slot across every set. Locking a way protects that slice of the cache from normal replacement, trading general-purpose cache capacity for software-controlled, predictable storage.
 
-The answer is architecture-specific. A hardware design could allow it if ordinary accesses bypass the cache or if the entire structure can operate as local memory.
-
-However, the example register explicitly supports only:
-
-$$
-nWaysLM = 0\ \text{to}\ nWays - 1
-$$
-
-For a four-way cache, the largest supported value is three. At least one way must remain available for normal caching.
-
-This avoids a case in which a new block maps to a set where every entry is unavailable to the normal replacement mechanism.
-
-## Can Ways Be Unlocked Again?
-
-Usually, yes—if the register is writable by software. Setting `nWaysLM` to a smaller value returns capacity to the normal cache. The exact behavior depends on the cache controller.
-
-Three operations must not be confused:
-
-- **Unlock:** make an entry or way eligible for normal replacement.
-- **Invalidate:** mark its cached contents as absent.
-- **Write back:** copy modified, or *dirty*, contents to the lower memory level.
-
-Before changing the partition, software may need to write back or invalidate affected lines. The required ordering and privilege level must come from the hardware specification.
-
-## Benefits and Costs
-
-Way locking is a trade-off, not an automatic optimization.
-
-### Potential benefits
-
-- Important data cannot be evicted by unrelated cache traffic.
-- Repeated lower-memory transfers can be reduced.
-- Access time can become more predictable.
-- Software can deliberately manage a small, fast working set.
-
-### Potential costs
-
-- The ordinary cache becomes smaller.
-- Remaining cache ways experience more conflicts.
-- Reserved capacity is wasted if the locked data is not reused.
-- Software must manage placement, synchronization, and lifetime correctly.
-- Reconfiguring ways may require write-back and invalidation operations.
-
-For example, reserving three ways of a four-way cache gives software most of the capacity, but leaves the hardware-managed cache with only one line per set. That can substantially increase conflict misses.
-
-## A Compact Mental Model
-
-Think of the cache as a parking lot:
-
-- **Sets** are rows.
-- **Ways** are parking spaces in every row.
-- A memory block is assigned to one row by its address.
-- It may occupy any available space in that row.
-- If the row is full, one car must leave—an eviction.
-- Way locking reserves the same-position space across every row.
-
-The key idea is:
-
-> Way locking trades general-purpose cache capacity for protected, predictable storage.
-
-Once cache lines, sets, and ways are clear, the mechanism is no longer mysterious: it is simply a configurable partition of the cache’s existing line slots.
+Once we arrive there from first principles, a reserved-way count or mask is no longer mysterious. It simply chooses how much of the existing storage should behave like local memory and how much should continue behaving like a cache.
