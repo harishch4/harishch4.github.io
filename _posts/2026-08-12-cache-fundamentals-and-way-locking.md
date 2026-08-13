@@ -8,8 +8,7 @@ description: "Building a cache from first principles to understand why cache lin
 math: true
 mermaid: true
 ---
-
-The first time I read about *way locking*, the term sounded as if it belonged near the beginning of a cache explanation. It does not. Way locking solves a problem created by several earlier design decisions, and it only makes sense after those decisions make sense.
+I started looking into way locking with a simple question: what exactly is being locked, and why would we deliberately stop part of a cache from behaving like a normal cache? I soon realized that way locking does not belong near the beginning of a cache explanation. It solves a problem created by several earlier design decisions, so answering that question meant going back to cache lines, sets, ways, and eviction—and following the design until way locking became necessary.
 
 So instead of beginning with a definition, let us build a cache together.
 
