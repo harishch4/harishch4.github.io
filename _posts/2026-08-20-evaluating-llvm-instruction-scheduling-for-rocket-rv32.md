@@ -1,5 +1,5 @@
 ---
-title: "Evaluating LLVM Instruction Scheduling for Rocket RV32"
+title: "Part 5 : Evaluating LLVM Instruction Scheduling for Rocket RV32"
 date: 2026-08-17 12:00:00 +0530
 categories: [Compilers, Instruction Scheduling]
 tags: [llvm, llvm-mca, risc-v, rocket, machine-ir, instruction-scheduling]
