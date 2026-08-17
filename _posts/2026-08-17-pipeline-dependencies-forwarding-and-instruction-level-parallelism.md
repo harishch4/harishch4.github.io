@@ -1,5 +1,5 @@
 ---
-title: "Pipeline Dependencies, Forwarding, and Instruction-Level Parallelism"
+title: "Part 2 : Pipeline Dependencies, Forwarding, and Instruction-Level Parallelism"
 date: 2026-08-17 12:00:00 +0530
 categories: [Computer Architecture, Instruction Scheduling]
 tags: [risc-v, rocket, pipeline-hazards, forwarding, scoreboard, ilp]
