@@ -1,5 +1,5 @@
 ---
-title: "Instruction Pipelining in an In-Order RISC-V Processor"
+title: "Part 1 : Instruction Pipelining in an In-Order RISC-V Processor"
 date: 2026-08-17 12:00:00 +0530
 categories: [Computer Architecture, Instruction Scheduling]
 tags: [risc-v, rocket, pipelining, computer-architecture, instruction-scheduling]
