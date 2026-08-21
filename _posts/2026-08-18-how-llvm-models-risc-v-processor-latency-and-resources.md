@@ -9,7 +9,6 @@ description: "Building LLVM's RISC-V scheduling model from the hardware question
 [Part 2]({% post_url 2026-08-17-pipeline-dependencies-forwarding-and-instruction-level-parallelism %}) ended at the point where the compiler finally had a reason to care about the processor. A dependency tells the compiler which instruction must come first, but it does not say how much distance the two instructions need.
 
 Consider the end of the dot-product calculation again:
-2026-08-18-how-llvm-models-risc-v-processor-latency-and-resources.md
 ```asm
 mul  t0, t0, t1
 add  a2, a2, t0
