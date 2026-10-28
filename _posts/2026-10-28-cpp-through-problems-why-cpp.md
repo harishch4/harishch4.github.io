@@ -1,21 +1,36 @@
 ---
-title: "Chapter 1: Why C++? Starting with a Small Program"
+title: "Part 1 : Why C++? Starting with a Small Program"
 date: 2026-10-28 00:00:00 +0530
-categories: [Programming Languages, C++]
+categories: [C++, C++ Through Problems]
 tags: [cpp, cpp-through-problems, fundamentals, standard-library]
 description: "Starting with a small collection of numbers to understand the questions behind C++: representation, abstraction, ownership, and how the language evolves."
-series: cpp-through-problems
-chapter: 1
-cpp_standard: C++11
 ---
-
-{% include cpp-series-nav.html %}
 
 When I look at C++ as a list of features, it is easy to lose the connections between them. Classes, templates, references, move semantics, concepts, coroutines: each has its own vocabulary and rules. Learning the definition of each one does not necessarily explain why I would reach for it in a program.
 
 I want to approach the language by following the questions that make those features useful. We will write a small program, notice what it asks us to manage, and then build the vocabulary needed to reason about it. Once the foundations are clear, we will follow the language through successive versions and examine what each addition helps us express.
 
 This first chapter starts with a collection of numbers. It is deliberately small enough that we can keep the whole task in our heads.
+
+## The path through this series
+
+**C++ Through Problems** is a growing series of posts. You should be comfortable with variables, conditions, loops, and basic functions in some programming language; prior C++ knowledge is not required.
+
+We will begin with compilation, types, functions, references, containers, classes, and object lifetime. Then we will examine the C++98/03 foundations: resource management, copying, templates, algorithms, exceptions, and runtime polymorphism.
+
+From there, we will follow the language through successive versions:
+
+| Version | Questions we will explore |
+|---|---|
+| C++11 | How can we transfer resources, express ownership, write small callable operations, and coordinate threads? |
+| C++14 | How can generic lambdas, type deduction, and more flexible compile-time functions make these tools easier to use? |
+| C++17 | How can we represent missing values and alternatives, simplify generic code, and borrow text safely? |
+| C++20 | How can we express template requirements, compose range operations, suspend computations, and organize code with modules? |
+| C++23 | How can we compose fallible operations, work with multidimensional data, and simplify everyday interfaces? |
+
+Each part will remain a normal blog post, grouped under the C++ Through Problems category. As later parts are added, they will link back to the earlier explanations they build on.
+
+For each feature, the aim is to understand the earlier approach, the limitation it exposes, the new solution, and its tradeoffs. Where we discuss historical design intent, we will distinguish our teaching examples from documented motivations and link to first-hand sources.
 
 ## Start with the work we want to do
 
@@ -199,5 +214,3 @@ In the next chapter, we will follow this same source file through compilation an
 - [Stroustrup's FAQ](https://www.stroustrup.com/bs_faq.html): first-hand discussion of C++'s goals, learning, and relationship to C.
 - [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines): guidance on interfaces, ownership, resource management, and expressing intent.
 - [C++ working draft: vector overview](https://eel.is/c++draft/vector.overview), [vector modifiers](https://eel.is/c++draft/vector.modifiers), and [range-based for](https://eel.is/c++draft/stmt.ranged): specification details behind the container and loop. These links track the evolving working draft rather than a frozen C++11 edition.
-
-{% include cpp-series-nav.html %}
