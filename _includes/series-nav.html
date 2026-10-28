@@ -1,0 +1,37 @@
+{%- if page.series and page.part -%}
+  {%- assign series_posts = site.posts | where: 'series', page.series | sort: 'part' -%}
+  {%- assign previous_part = nil -%}
+  {%- assign next_part = nil -%}
+  {%- for entry in series_posts -%}
+    {%- if entry.part < page.part -%}
+      {%- assign previous_part = entry -%}
+    {%- elsif entry.part > page.part -%}
+      {%- assign next_part = entry -%}
+      {%- break -%}
+    {%- endif -%}
+  {%- endfor -%}
+  <nav aria-label="Series navigation">
+    <hr>
+    <p><strong>{{ page.series_title | default: page.series | escape }}</strong> · Part {{ page.part }}</p>
+    {% if previous_part %}
+      <p>Previous: <a href="{{ previous_part.url | relative_url }}">{{ previous_part.title | escape }}</a></p>
+    {% endif %}
+    {% if next_part %}
+      <p>Next: <a href="{{ next_part.url | relative_url }}">{{ next_part.title | escape }}</a></p>
+    {% endif %}
+    <details>
+      <summary>All parts in this series</summary>
+      <ol>
+        {% for entry in series_posts %}
+          <li value="{{ entry.part }}">
+            {% if entry.url == page.url %}
+              <span aria-current="page">{{ entry.title | escape }}</span>
+            {% else %}
+              <a href="{{ entry.url | relative_url }}">{{ entry.title | escape }}</a>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    </details>
+  </nav>
+{%- endif -%}
