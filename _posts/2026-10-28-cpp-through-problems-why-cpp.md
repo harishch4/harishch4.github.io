@@ -1,216 +1,118 @@
 ---
-title: "Part 1 : Why C++? Starting with a Small Program"
+title: "Part 1 : Learning C++ When You Already Know C"
 date: 2026-10-28 00:00:00 +0530
 categories: [C++, C++ Through Problems]
-tags: [cpp, cpp-through-problems, fundamentals, standard-library]
-description: "Starting with a small collection of numbers to understand the questions behind C++: representation, abstraction, ownership, and how the language evolves."
+tags: [cpp, cpp-through-problems, fundamentals]
+description: "A learning path from C to C++: understand the foundations, then follow the problems behind features introduced in successive versions."
 ---
 
-When I look at C++ as a list of features, it is easy to lose the connections between them. Classes, templates, references, move semantics, concepts, coroutines: each has its own vocabulary and rules. Learning the definition of each one does not necessarily explain why I would reach for it in a program.
+If you already know C, a small C++ program can look familiar enough to follow. There are functions, loops, pointers, and structures. You can usually find the calculation and understand what it is trying to do.
 
-I want to approach the language by following the questions that make those features useful. We will write a small program, notice what it asks us to manage, and then build the vocabulary needed to reason about it. Once the foundations are clear, we will follow the language through successive versions and examine what each addition helps us express.
+Then you encounter a constructor, a reference, or a template. An explanation of one leads to another. To understand a smart pointer, you need to understand ownership and destruction. To understand moving an object, you need to understand what copying that object would mean. Soon there are several unfamiliar concepts open at once, and it becomes difficult to decide which one to learn first.
 
-This first chapter starts with a collection of numbers. It is deliberately small enough that we can keep the whole task in our heads.
+Knowing C gives us a useful starting point. What we need next is an order in which the C++ ideas can build on one another.
 
-## The path through this series
+That is the purpose of this series. We will begin with problems we can already express in C, examine the responsibilities those solutions leave with the programmer, and introduce the C++ mechanisms that help organize them. Once those foundations are clear, we will follow the language through its different versions and ask what each addition makes possible or easier to express.
 
-**C++ Through Problems** is a growing series of posts. You should be comfortable with variables, conditions, loops, and basic functions in some programming language; prior C++ knowledge is not required.
+## We Already Know How to Represent Data
 
-We will begin with compilation, types, functions, references, containers, classes, and object lifetime. Then we will examine the C++98/03 foundations: resource management, copying, templates, algorithms, exceptions, and runtime polymorphism.
+Suppose a program needs to work with a sequence of measurements. In C, we might represent it like this:
 
-From there, we will follow the language through successive versions:
-
-| Version | Questions we will explore |
-|---|---|
-| C++11 | How can we transfer resources, express ownership, write small callable operations, and coordinate threads? |
-| C++14 | How can generic lambdas, type deduction, and more flexible compile-time functions make these tools easier to use? |
-| C++17 | How can we represent missing values and alternatives, simplify generic code, and borrow text safely? |
-| C++20 | How can we express template requirements, compose range operations, suspend computations, and organize code with modules? |
-| C++23 | How can we compose fallible operations, work with multidimensional data, and simplify everyday interfaces? |
-
-Each part will remain a normal blog post, grouped under the C++ Through Problems category. As later parts are added, they will link back to the earlier explanations they build on.
-
-For each feature, the aim is to understand the earlier approach, the limitation it exposes, the new solution, and its tradeoffs. Where we discuss historical design intent, we will distinguish our teaching examples from documented motivations and link to first-hand sources.
-
-## Start with the work we want to do
-
-Suppose a program receives some measurements and needs their total. For now, the measurements are whole numbers, the collection is small, and the total fits in an `int`.
-
-We can write the calculation directly:
-
-```cpp
-int total = 12 + 18 + 15;
+```c
+struct Samples {
+    int *data;
+    size_t size;
+    size_t capacity;
+};
 ```
 
-This expresses one particular calculation. As soon as the data comes from somewhere else, we need a representation for the collection and a way to visit its elements.
+Here, `size` records how many measurements are present, while `capacity` records how many elements the allocated storage can hold. Assume this structure owns its allocation.
 
-An array gives us a first representation:
+The declaration is small, but using it correctly depends on rules that the declaration does not enforce. `size` must not exceed `capacity`. The pointer must refer to sufficient storage whenever capacity is nonzero. When the collection grows, its fields must still agree after the change. Eventually, its allocation must be released.
 
-```cpp
-int samples[] = {12, 18, 15};
-int total = 0;
+We can write functions to initialize the structure, append an element, and destroy it:
 
-for (int i = 0; i < 3; ++i) {
-    total += samples[i];
-}
+```c
+int samples_init(struct Samples *samples);
+int samples_append(struct Samples *samples, int value);
+void samples_destroy(struct Samples *samples);
 ```
 
-`samples` contains three integers. The loop starts at index zero, reads each element, and adds it to `total`. The array's size is fixed; we cannot append a fourth element to that same array.
+This is a workable design. C programs use interfaces like this to manage all kinds of resources.
 
-There is also a relationship we have written down twice: the initializer has three elements, and the loop uses the number `3`. Adding an element without updating the loop would silently leave a measurement out. We can derive the array's size instead, and later we will see several ways to do that.
+But consider what happens when we write:
 
-For the moment, this exposes two separate questions. How should the program know how many elements to visit? And what should happen when the collection needs to grow?
-
-## A collection that can grow
-
-Here is a complete C++ program using a standard-library container:
-
-```cpp
-#include <iostream>
-#include <vector>
-
-int main()
-{
-    std::vector<int> samples{12, 18, 15};
-    samples.push_back(21);
-
-    int total = 0;
-    for (int sample : samples) {
-        total += sample;
-    }
-
-    std::cout << "Total: " << total << '\n';
-}
+```c
+struct Samples second = first;
 ```
 
-The output is:
+The structure's fields are copied, including the pointer. The allocation itself is not duplicated. If both structures are then treated as independent owners and destroyed, the program may free the same allocation twice.
 
-```text
-Total: 66
-```
+We need a policy: perhaps copying is forbidden, perhaps an explicit operation makes an independent copy, or perhaps ownership is transferred. We also need callers to follow that policy.
 
-There is unfamiliar syntax here, but we can connect each piece to its job.
+The interesting question is what happens when these rules become part of the type's behaviour.
 
-| Piece | What it contributes |
-|---|---|
-| `#include <vector>` | Makes the standard library's vector declarations available |
-| `std::vector<int>` | A growable sequence of integers |
-| `{12, 18, 15}` | Supplies its initial elements |
-| `samples.push_back(21)` | Appends one element |
-| `for (int sample : samples)` | Visits each element, copying its integer value into `sample` |
-| `#include <iostream>` | Makes the standard stream facilities used here available |
-| `std::cout` | Writes to the standard output stream |
-| `'\n'` | A newline character |
+## A Type Can Take Responsibility for Its Rules
 
-`std` is the namespace used by the standard library. The `::` connects that namespace name to a name inside it. `int main()` defines the entry function for this ordinary hosted program. Reaching its closing brace returns a success status, as if we had written `return 0;`.
+C++ lets a class define how its objects are initialized, destroyed, copied, and assigned. It can also restrict direct access to the representation, so code using an object works through operations that preserve its rules.
 
-The range-based loop follows the collection's elements without a separately maintained element count. We could also use a range-based loop with the earlier array. Choosing a vector and choosing that loop solve different parts of our problem.
+Each of those facilities answers a different question.
 
-### Build and run it
+A constructor gives initialization a defined place. A destructor gives end-of-lifetime cleanup a defined place. Copy operations let a type specify what copying its value means, or prevent copying when that operation does not make sense.
 
-The complete example uses **C++11 or later**. Save it as `total.cpp`, or [download the source]({{ '/assets/code/cpp-through-problems/chapter-01/total.cpp' | relative_url }}), then run:
+We will examine these mechanisms separately and then put them together. Introducing all of them in a complete resource-owning class at the beginning would recreate the problem we are trying to avoid: too many ideas arriving before their relationships are clear.
 
-```bash
-g++ -std=c++11 -Wall -Wextra -pedantic total.cpp -o total
-./total
-```
+For now, the C structure gives us something concrete to carry forward. We already understand its representation. What we want to learn is how C++ lets us express the rules around that representation, and how those rules affect code that uses it.
 
-With Clang, replace `g++` with `clang++`. These commands assume the compiler and its C++ standard-library development files are installed. The next chapter will examine what happens between the source file and the executable.
+## The Order We Will Follow
 
-## Where did the storage management go?
+Before implementing that class, we need a few smaller pieces.
 
-The interesting part of the vector example is the work we no longer spell out at each call site.
+We will begin with the practical differences that matter when moving from C source to C++: compiling in the right language mode, declarations and type checking, initialization, references, and function overloading. The aim is to establish the vocabulary that later examples depend on. We will assume familiarity with C functions, pointers, arrays, control flow, and separate compilation.
 
-The vector keeps track of how many elements it contains and how much storage is available. When appending requires more storage, it arranges that storage and transfers the existing elements as needed. When the local vector's lifetime ends, it destroys its elements and releases the storage it owns.
+From there, we will build classes around familiar data. This leads naturally to access control, constructors, destructors, and the distinction between an object's storage and its lifetime.
 
-We still need to understand those operations. Inserting an element may allocate memory, and growth may invalidate references or pointers to existing elements. Abstraction gives us a place to put that responsibility; it does not make the underlying work disappear.
+Once lifetime is clear, we can connect it to resources. We will follow an allocation or an open file through normal execution, early returns, and failures. That gives RAII a problem to solve and gives us a reason to study exceptions alongside cleanup.
 
-Here the variable `samples` is a local object. Its lifetime ends when execution leaves its scope normally. Its owned element storage is managed separately by the vector. Describing the whole thing simply as being "on the stack" would hide that distinction.
+Copying comes next. We will distinguish copying a pointer from copying the resource it refers to, and examine the behaviour a resource-owning type needs. Those decisions prepare us for move semantics later.
 
-This leads to one of the central questions in C++:
+Templates will enter when we have an operation or a type whose structure should be reusable across element types. With that foundation, containers, iterators, and algorithms become a connected design we can investigate.
 
-> Which object is responsible for a resource, and when does that responsibility end?
+We will use standard-library types along the way. Using a vector does not require first implementing one. Building small types of our own will help us understand the rules that make library types behave as they do.
 
-We will return to that question when we study constructors, destructors, and RAII. RAII connects resource ownership to object lifetime. The resource might be memory, an open file, or a held lock.
+## Where the C++ Versions Fit
 
-There is no explicit `new` or `delete` in our example. Using an existing resource-managing type is already useful before we learn to implement one.
+The foundations give us the context for the language's evolution.
 
-## A type can carry behaviour
+We will first establish the core ideas present in C++98/03. Then we will work through additions in C++11, C++14, C++17, C++20, and C++23, ordering topics within each version by their dependencies.
 
-Compare these declarations:
+C++11 will be a substantial part of the journey. Once we understand copying and ownership, we can investigate moving resources and representing ownership with smart pointers. Once callable objects and algorithms are familiar, lambdas have a clear role. Compile-time evaluation, variadic templates, and concurrency will each get their own prerequisites and examples.
 
-```cpp
-int total = 0;
-std::vector<int> samples{12, 18, 15};
-```
+Later versions will build on that picture. Generic lambdas extend an idea we already know. `if constexpr` helps us express choices inside generic code. Concepts let us state requirements on template arguments. Ranges build on our experience with collections, iterators, and algorithms.
 
-Both introduce objects with a type. An integer supports operations such as addition and comparison. A vector supports operations such as appending, obtaining its size, and visiting its elements.
+The chapter pattern will stay consistent: begin with a task, attempt it with the tools already introduced, identify the difficulty, and examine the new feature. We will then consider where it helps, what it costs, and which earlier approaches remain useful.
 
-C++ lets libraries define types with their own operations and lifetime behaviour. `std::vector` is supplied by the standard library; the general mechanisms for building such types are part of the language.
+Examples will explain how a feature can be useful. When discussing its historical motivation, we will also consult proposals and first-hand design accounts rather than treating our example as the whole reason the feature exists.
 
-That distinction matters. A compiler has language rules for classes and templates. The standard library uses those facilities to provide containers and algorithms. We will also use them to build our own abstractions when a program needs a type that expresses its particular rules.
+## C Gives Us a Starting Point, but Some Assumptions Need Checking
 
-The `<int>` in `std::vector<int>` selects the element type. A vector of another supported element type uses the same container template. We will study templates after we have enough experience with ordinary types and functions to see what is being generalized.
+Familiar syntax can hide differences. C++ has its own rules for conversions, initialization, overload resolution, and object lifetime. Existing C code is not automatically valid C++, and compiling it as C++ does not by itself give it a useful C++ design.
 
-## Abstraction has costs we can investigate
+We will make those differences explicit when they affect an example. In particular, we will distinguish obtaining raw storage from constructing an object in that storage. That distinction becomes important once a type has initialization and cleanup behaviour of its own.
 
-The vector program is easier to extend than the fixed-size example, but it makes a different storage choice.
+We will also keep implementation observations separate from language guarantees. Generated code can help us investigate the cost of a feature, but one compiler's output for one example cannot establish how every valid program must behave.
 
-If we know there will always be exactly three measurements, a fixed-size array may be sufficient. If the collection grows as input arrives, a vector can manage that growth. A suitable representation depends on the task.
+## Where We Begin Next
 
-For `int`, vector elements are stored contiguously. That property is useful when traversing them or passing a pointer and element count to an interface. Appending is amortized constant time, but a particular append can require allocating new storage and transferring existing elements.
+Our first task is to make the boundary between C and C++ concrete.
 
-These are properties we can reason about before inspecting assembly. Later, when we measure or examine generated code, we will keep the boundaries clear: what the language guarantees, what the library promises, and what a particular implementation does.
+In Part 2, we will take a small C-style program and compile it as C++. We will examine the language mode, a few assumptions that stop working, and the first choices C++ gives us for expressing the program more clearly. We will keep the build discussion focused on what changes for a reader who already knows separate compilation and linking in C.
 
-The fact that a loop is short does not establish that it is fast. Equally, the fact that a library operation hides several steps does not establish that it is slow. We need to know which work the task requires and which work our chosen representation adds.
+After that, we can begin building the type model: initialization, references, and functions, followed by classes and lifetime. Each step will supply something the next one needs.
 
-## Where the versions enter the story
+The question we will return to throughout the series is simple: we already know how to perform the work in C; what does C++ let us express about that work, and when is that additional structure useful?
 
-This tiny program already combines ideas from different stages of C++.
+## Further Reading
 
-| Facility used here | Standard context |
-|---|---|
-| `std::vector` and the standard stream library | Present in C++98 |
-| Initializing this vector from a braced list of elements | Available since C++11 |
-| Range-based `for` | Introduced in C++11 |
-
-Braces themselves were not new in C++11: the earlier array initialization also uses braces. What matters is the particular initialization facility we are using.
-
-This is how we will approach versions throughout the series. We will identify the feature precisely, show the earlier way to express the task, and ask what the new form changes.
-
-For example, an earlier vector traversal could use an explicitly written iterator type. A range-based loop gives us a direct way to express visiting a range's elements. That helps with readability, but it does not answer every iteration problem: sometimes we need positions, several ranges together, or a different traversal strategy.
-
-Later chapters will follow larger changes. Once copying and ownership make sense, we can ask why move semantics is useful. Once templates make sense, we can ask what constraints and concepts contribute. Each question should arise from something concrete we can already understand.
-
-## What this first example leaves open
-
-The program works for the small inputs we chose. It also gives us questions to carry forward:
-
-- What is an object, and how does its type affect its operations?
-- What is copied when we pass a collection to a function?
-- What happens to a reference when a vector grows?
-- How does cleanup happen when a function exits early?
-- How do we represent an operation that can fail?
-- What happens if an integer calculation exceeds its representable range?
-
-For that last question, signed integer overflow is undefined behaviour in C++. Our example deliberately keeps the total within range. A program accepting arbitrary measurements would need an explicit policy for range and overflow; changing a container does not solve an arithmetic problem.
-
-We will answer these questions in stages. The purpose of the first program is to give the discussion something to refer back to.
-
-## Try changing it
-
-Before continuing, make three small changes:
-
-1. Append another measurement and predict the output before running it.
-2. Remove all initial measurements, leaving `std::vector<int> samples{};`, and remove the append. What does the loop do, and what is printed?
-3. Change the loop body to `sample = 0;`. After that loop, use a second loop to print the vector's elements. Did they change?
-
-The third experiment is a useful starting point for the chapter on values and references. In the loop we wrote, `sample` is a separate integer initialized from each element. Changing it does not change that element.
-
-In the next chapter, we will follow this same source file through compilation and linking. Before building more of the language, it helps to know what the tools are doing with the program we have already written.
-
-## References and further reading
-
-- [Stroustrup's FAQ](https://www.stroustrup.com/bs_faq.html): first-hand discussion of C++'s goals, learning, and relationship to C.
-- [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines): guidance on interfaces, ownership, resource management, and expressing intent.
-- [C++ working draft: vector overview](https://eel.is/c++draft/vector.overview), [vector modifiers](https://eel.is/c++draft/vector.modifiers), and [range-based for](https://eel.is/c++draft/stmt.ranged): specification details behind the container and loop. These links track the evolving working draft rather than a frozen C++11 edition.
+- [Stroustrup's FAQ](https://www.stroustrup.com/bs_faq.html), including its discussion of C and C++ and the design of the language.
+- [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines), for guidance we will revisit as interfaces, lifetime, and resource management enter the story.
