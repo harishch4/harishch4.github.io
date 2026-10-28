@@ -4,6 +4,9 @@ date: 2026-10-28 00:00:00 +0530
 categories: [C++, C++ Through Problems]
 tags: [cpp, cpp-through-problems, fundamentals]
 description: "A learning path from C to C++: understand the foundations, then follow the problems behind features introduced in successive versions."
+series: cpp-through-problems
+series_title: C++ Through Problems
+part: 1
 ---
 
 If you already know C, a small C++ program can look familiar enough to follow. There are functions, loops, pointers, and structures. You can usually find the calculation and understand what it is trying to do.
@@ -106,7 +109,7 @@ We will also keep implementation observations separate from language guarantees.
 
 Our first task is to make the boundary between C and C++ concrete.
 
-In Part 2, we will take a small C-style program and compile it as C++. We will examine the language mode, a few assumptions that stop working, and the first choices C++ gives us for expressing the program more clearly. We will keep the build discussion focused on what changes for a reader who already knows separate compilation and linking in C.
+In the next part, we will take a small C-style program and compile it as C++. We will examine the language mode, a few assumptions that stop working, and the first choices C++ gives us for expressing the program more clearly. We will keep the build discussion focused on what changes for a reader who already knows separate compilation and linking in C.
 
 After that, we can begin building the type model: initialization, references, and functions, followed by classes and lifetime. Each step will supply something the next one needs.
 
@@ -116,3 +119,5 @@ The question we will return to throughout the series is simple: we already know 
 
 - [Stroustrup's FAQ](https://www.stroustrup.com/bs_faq.html), including its discussion of C and C++ and the design of the language.
 - [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines), for guidance we will revisit as interfaces, lifetime, and resource management enter the story.
+
+{% include series-nav.html %}
