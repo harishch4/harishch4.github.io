@@ -1,123 +1,74 @@
 ---
-title: "Part 1 : Learning C++ When You Already Know C"
+title: "Part 1 : Why C++ Was Created"
 date: 2026-10-28 00:00:00 +0530
-categories: [C++, C++ Through Problems]
-tags: [cpp, cpp-through-problems, fundamentals]
-description: "A learning path from C to C++: understand the foundations, then follow the problems behind features introduced in successive versions."
-series: cpp-through-problems
-series_title: C++ Through Problems
+categories: [C++, Understanding C++ as It Evolves]
+tags: [cpp, cpp-evolution, language-design, history]
+description: "The problem behind C++: combining support for organizing complex programs with the efficiency and flexibility required for systems programming."
+series: understanding-cpp-as-it-evolves
+series_title: Understanding C++ as It Evolves
 part: 1
 ---
 
-If you already know C, a small C++ program can look familiar enough to follow. There are functions, loops, pointers, and structures. You can usually find the calculation and understand what it is trying to do.
+C gives us direct ways to describe computation and work with memory. We can build operating systems, simulations, and large applications with it. So what problem was C++ trying to solve?
 
-Then you encounter a constructor, a reference, or a template. An explanation of one leads to another. To understand a smart pointer, you need to understand ownership and destruction. To understand moving an object, you need to understand what copying that object would mean. Soon there are several unfamiliar concepts open at once, and it becomes difficult to decide which one to learn first.
+The answer begins with a difficulty that grows with the program: keeping its organization understandable while still using the machine efficiently.
 
-Knowing C gives us a useful starting point. What we need next is an order in which the C++ ideas can build on one another.
+## Two Useful Qualities, in Different Tools
 
-That is the purpose of this series. We will begin with problems we can already express in C, examine the responsibilities those solutions leave with the programmer, and introduce the C++ mechanisms that help organize them. Once those foundations are clear, we will follow the language through its different versions and ask what each addition makes possible or easier to express.
+During his doctoral work at Cambridge, Bjarne Stroustrup built a simulator to study system software. He used Simula, whose classes helped him represent the system as cooperating components. That organization remained manageable as the simulator grew.
 
-## We Already Know How to Represent Data
+The performance of the Simula system he was using, however, made the simulator impractical for obtaining the results he needed. He rewrote it in BCPL. The new version ran fast enough, but writing and debugging it was much harder.
 
-Suppose a program needs to work with a sequence of measurements. In C, we might represent it like this:
+These experiences suggested a goal: preserve the facilities that helped him structure a complex program while obtaining the performance needed to run it usefully. This was a lesson from particular tools and implementations, rather than proof that abstraction must be slow.
 
-```c
-struct Samples {
-    int *data;
-    size_t size;
-    size_t capacity;
-};
-```
+In 1979, at Bell Labs, work on distributing parts of the UNIX kernel brought him back to questions of system organization and communication. He began developing **C with Classes**, combining ideas from Simula with C's suitability for systems programming. Stroustrup describes this progression in [A History of C++: 1979–1991](https://www.stroustrup.com/hopl2.pdf), sections 2.1–2.2.
 
-Here, `size` records how many measurements are present, while `capacity` records how many elements the allocated storage can hold. Assume this structure owns its allocation.
+## Why Classes Mattered
 
-The declaration is small, but using it correctly depends on rules that the declaration does not enforce. `size` must not exceed `capacity`. The pointer must refer to sufficient storage whenever capacity is nonzero. When the collection grows, its fields must still agree after the change. Eventually, its allocation must be released.
+A large program contains concepts that are richer than individual machine values: a connection, a task, a matrix, a file. Each has data, permitted operations, and rules that those operations must preserve.
 
-We can write functions to initialize the structure, append an element, and destroy it:
+We can represent these concepts in C using structures and functions. A carefully designed C interface can also hide its representation. The question is how much support the language provides for expressing and checking that organization.
 
-```c
-int samples_init(struct Samples *samples);
-int samples_append(struct Samples *samples, int value);
-void samples_destroy(struct Samples *samples);
-```
+Classes give a user-defined type a place for its representation and operations, with access rules controlling how they are used. Construction and destruction give objects defined beginnings and ends. Inheritance and virtual functions provide ways to express related types and select behaviour through an interface.
 
-This is a workable design. C programs use interfaces like this to manage all kinds of resources.
+These mechanisms let us put more of a program's design into its types. They do not automatically produce a good design; they give us tools for defining one. And classes are only part of C++: its support for generic programming later became equally important. Stroustrup's [overview of the language](https://www.stroustrup.com/C++.html) describes these complementary roles.
 
-But consider what happens when we write:
+## The Constraint: Keep Abstraction Affordable
 
-```c
-struct Samples second = first;
-```
+Organizing a program would be less useful for systems work if every abstraction imposed an unacceptable execution or memory cost.
 
-The structure's fields are copied, including the pointer. The allocation itself is not duplicated. If both structures are then treated as independent owners and destroyed, the program may free the same allocation twice.
+C++ therefore developed around a demanding goal: let programmers express higher-level ideas while retaining control over representation and resource use. Its **zero-overhead principle** has two parts: unused facilities should not impose costs, and a used abstraction should be implementable as efficiently as equivalent hand-written functionality.
 
-We need a policy: perhaps copying is forbidden, perhaps an explicit operation makes an independent copy, or perhaps ownership is transferred. We also need callers to follow that policy.
+This is a design principle, not a guarantee that every C++ program is efficient. A general-purpose abstraction may still do more work than a specialized solution needs. We must understand the behaviour we choose. Stroustrup explains this distinction in [C++ — an Invisible Foundation of Everything](https://accu.org/journals/overload/29/161/stroustrup/).
 
-The interesting question is what happens when these rules become part of the type's behaviour.
+Compatibility also mattered. Building on C let the language work within an existing world of code, tools, and systems expertise. That continuity introduced compromises: C++ retained much familiar syntax and many low-level facilities, rather than becoming a language designed entirely afresh.
 
-## A Type Can Take Responsibility for Its Rules
+## From C with Classes to a Standard Language
 
-C++ lets a class define how its objects are initialized, destroyed, copied, and assigned. It can also restrict direct access to the representation, so code using an object works through operations that preserve its rules.
+C with Classes evolved into C++, with additions including virtual functions, overloading, and references. The first commercial release followed in 1985. The first ISO standard arrived in 1998, after substantial development of both the language and its library.
 
-Each of those facilities answers a different question.
+By then, C++ included templates, exceptions, and a standard library containing strings, containers, iterators, and algorithms. The containers and algorithms associated with the STL demonstrated another kind of abstraction: code reusable across types without requiring those types to share an inheritance hierarchy.
 
-A constructor gives initialization a defined place. A destructor gives end-of-lifetime cleanup a defined place. Copy operations let a type specify what copying its value means, or prevent copying when that operation does not make sense.
+C++98 therefore describes the first standardized foundation, not the year those ideas were all invented. The [Computer History Museum's C++ collection](https://softwarepreservation.computerhistory.org/c_plus_plus/) records their development and standardization.
 
-We will examine these mechanisms separately and then put them together. Introducing all of them in a complete resource-owning class at the beginning would recreate the problem we are trying to avoid: too many ideas arriving before their relationships are clear.
+## What the Later Versions Added
 
-For now, the C structure gives us something concrete to carry forward. We already understand its representation. What we want to learn is how C++ lets us express the rules around that representation, and how those rules affect code that uses it.
+The language continued evolving as experience exposed awkward interfaces, missing facilities, and opportunities for better expression. This is the route we will follow through the series:
 
-## The Order We Will Follow
+| Version | Selected additions we will examine |
+|---|---|
+| **C++98** | The standardized foundation: classes, object lifetime, templates, exceptions, containers, and algorithms |
+| **C++03** | Corrections and clarifications to that foundation |
+| **C++11** | Move semantics, smart pointers such as `unique_ptr` and `shared_ptr`, lambdas, type deduction with `auto`, `constexpr`, and a standard threading and memory model |
+| **C++14** | Generic lambdas, return type deduction, more flexible `constexpr` functions, and `make_unique` |
+| **C++17** | Structured bindings, `if constexpr`, `optional`, `variant`, `string_view`, and filesystem facilities |
+| **C++20** | Concepts, ranges, coroutines, modules, and further compile-time facilities |
+| **C++23** | `expected`, `print`, `mdspan`, and further language and ranges improvements |
 
-Before implementing that class, we need a few smaller pieces.
+The table is a map, not a prerequisite list. We will introduce these facilities individually, with enough context to understand what each contributes. The [C++11 FAQ](https://www.stroustrup.com/C++11FAQ.html), [Clang language tables](https://clang.llvm.org/cxx_status.html), and libc++'s [C++17](https://libcxx.llvm.org/Status/Cxx17.html) and [C++23](https://libcxx.llvm.org/Status/Cxx23.html) tables document the additions and their associated proposals.
 
-We will begin with the practical differences that matter when moving from C source to C++: compiling in the right language mode, declarations and type checking, initialization, references, and function overloading. The aim is to establish the vocabulary that later examples depend on. We will assume familiarity with C functions, pointers, arrays, control flow, and separate compilation.
+The central ambition remains recognizable: make complex software easier to express and maintain while using hardware effectively. Later versions give us new ways to pursue it, alongside older approaches that existing programs still use.
 
-From there, we will build classes around familiar data. This leads naturally to access control, constructors, destructors, and the distinction between an object's storage and its lifetime.
-
-Once lifetime is clear, we can connect it to resources. We will follow an allocation or an open file through normal execution, early returns, and failures. That gives RAII a problem to solve and gives us a reason to study exceptions alongside cleanup.
-
-Copying comes next. We will distinguish copying a pointer from copying the resource it refers to, and examine the behaviour a resource-owning type needs. Those decisions prepare us for move semantics later.
-
-Templates will enter when we have an operation or a type whose structure should be reusable across element types. With that foundation, containers, iterators, and algorithms become a connected design we can investigate.
-
-We will use standard-library types along the way. Using a vector does not require first implementing one. Building small types of our own will help us understand the rules that make library types behave as they do.
-
-## Where the C++ Versions Fit
-
-The foundations give us the context for the language's evolution.
-
-We will first establish the core ideas present in C++98/03. Then we will work through additions in C++11, C++14, C++17, C++20, and C++23, ordering topics within each version by their dependencies.
-
-C++11 will be a substantial part of the journey. Once we understand copying and ownership, we can investigate moving resources and representing ownership with smart pointers. Once callable objects and algorithms are familiar, lambdas have a clear role. Compile-time evaluation, variadic templates, and concurrency will each get their own prerequisites and examples.
-
-Later versions will build on that picture. Generic lambdas extend an idea we already know. `if constexpr` helps us express choices inside generic code. Concepts let us state requirements on template arguments. Ranges build on our experience with collections, iterators, and algorithms.
-
-The chapter pattern will stay consistent: begin with a task, attempt it with the tools already introduced, identify the difficulty, and examine the new feature. We will then consider where it helps, what it costs, and which earlier approaches remain useful.
-
-Examples will explain how a feature can be useful. When discussing its historical motivation, we will also consult proposals and first-hand design accounts rather than treating our example as the whole reason the feature exists.
-
-## C Gives Us a Starting Point, but Some Assumptions Need Checking
-
-Familiar syntax can hide differences. C++ has its own rules for conversions, initialization, overload resolution, and object lifetime. Existing C code is not automatically valid C++, and compiling it as C++ does not by itself give it a useful C++ design.
-
-We will make those differences explicit when they affect an example. In particular, we will distinguish obtaining raw storage from constructing an object in that storage. That distinction becomes important once a type has initialization and cleanup behaviour of its own.
-
-We will also keep implementation observations separate from language guarantees. Generated code can help us investigate the cost of a feature, but one compiler's output for one example cannot establish how every valid program must behave.
-
-## Where We Begin Next
-
-Our first task is to make the boundary between C and C++ concrete.
-
-In the next part, we will take a small C-style program and compile it as C++. We will examine the language mode, a few assumptions that stop working, and the first choices C++ gives us for expressing the program more clearly. We will keep the build discussion focused on what changes for a reader who already knows separate compilation and linking in C.
-
-After that, we can begin building the type model: initialization, references, and functions, followed by classes and lifetime. Each step will supply something the next one needs.
-
-The question we will return to throughout the series is simple: we already know how to perform the work in C; what does C++ let us express about that work, and when is that additional structure useful?
-
-## Further Reading
-
-- [Stroustrup's FAQ](https://www.stroustrup.com/bs_faq.html), including its discussion of C and C++ and the design of the language.
-- [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines), for guidance we will revisit as interfaces, lifetime, and resource management enter the story.
+We will begin the foundations with classes: what a user-defined type adds beyond grouping data, and how its interface can express the rules for using that data.
 
 {% include series-nav.html %}
